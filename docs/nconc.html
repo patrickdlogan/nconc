@@ -1,0 +1,545 @@
+<!DOCTYPE html>  <html> <head>   <title>nconc.js</title>   <meta http-equiv="content-type" content="text/html; charset=UTF-8">   <link rel="stylesheet" media="all" href="docco.css" /> </head> <body>   <div id="container">     <div id="background"></div>          <table cellpadding="0" cellspacing="0">       <thead>         <tr>           <th class="docs">             <h1>               nconc.js             </h1>           </th>           <th class="code">           </th>         </tr>       </thead>       <tbody>                               <tr id="section-1">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-1">&#182;</a>               </div>               <p><strong>NCONC</strong> is a Scheme interpreter written in Javascript. The primary features at this point are:</p>
+
+<ul>
+<li>Tail recursion does not grow the Javascript stack. (i.e. "TCO" - Tail Call Optimization)</li>
+<li>Full continuations and <code>call-with-current-continuation</code> (aka <code>call/cc</code>)</li>
+</ul>
+
+<h2>Missing at this point:</h2>
+
+<ul>
+<li>Macros</li>
+<li>Printing</li>
+<li>Everything else that's easily implemented in every interpreter for every language (e.g. the standard libraries)</li>
+</ul>
+
+<h2>Implemented:</h2>
+
+<h3><code>call-with-current-continuation</code></h3>
+
+<p>Most implementations of Scheme found on the web will state they
+implement "almost all of Scheme" <em>except</em> for full continuations,
+and often except for efficient tail calls. The problem with this is
+the essence of Scheme is, truly, full continuations and efficient
+tail calls.</p>
+
+<p>Implementing simple mechanisms for full continuations and efficient
+tail calls is not difficult. My impression is most language
+implementers are just unfamiliar with these
+mechanisms. Additionally, most programmers are just unfamiliar with
+the utility of these features.</p>
+
+<p>Most Scheme programs will run fine without full continuations. But
+most of the interesting, uniquely-Scheme programs would be
+cumbersome at best, if not impossible, to implement without access
+to continuations.</p>
+
+<p>And so NCONC's <em>current</em> purpose is not to provide anything
+approximating a usable Scheme system. Rather it is currently
+intended to demonstrate how full continuations can be implemented
+in a small number of lines of Javascript. The same mechanism (a
+trampoline) can be applied in a significantly more efficient
+interpreter or compiler, and without much more difficulty.</p>
+
+<h2>Why 'NCONC'?</h2>
+
+<p><code>NCONC</code> is from Mac Lisp (and so Common Lisp) - rather than
+Scheme.</p>
+
+<pre><code>(DEFUN NCONC (&amp;OPTIONAL (L1 NIL) (L2 NIL L2?) &amp;REST MORE)
+  (COND ((NOT L2?) L1)
+        ((NULL MORE) (*NCONC L1 L2)) ;defined elsewhere in this manual
+        (T (*NCONC L1 (LEXPR-FUNCALL #'NCONC L2 MORE)))))
+</code></pre>
+
+<p>But Scheme has <code>SET-CDR!</code> and so <code>NCONC!</code> could be defined in
+Scheme. [SRFI 1 (List Library)](http://srfi.schemers.org/srfi-1/
+"Scheme SRFI 1 (List Library)") defines <code>APPEND!</code> which is
+essentially <code>NCONC</code>.</p>
+
+<pre><code>;; Untested as of yet...
+(define append! lists
+  (define (append-aux! l1 l2 . rest)
+    (set-cdr! l1 l2)
+    (if (not (null? rest))
+      (append-aux! l1 (car rest) (cdr rest))))
+  (case (length lists) 
+    ((0) '())
+    ((1) (car lists))
+    (else (append-aux! (car lists) (cadr lists) (cddr lists)))))
+</code></pre>
+
+<p>However calling this project <code>APPEND!</code> would not be nearly as fun
+as <code>NCONC</code>. The word is not only fun to pronounce, it should imply
+the techniques here (or alternatives) should be used to alter the
+tails of all Scheme interpreters and compilers. Saying no to the
+<a href="http://library.readscheme.org/page1.html" title="The Original 'Lambda Papers' by Guy Steele and Gerald Sussman">'expensive procedure call
+myth'</a> has been a foundation of Scheme for well over 30 years.</p>             </td>             <td class="code">               <div class="highlight"><pre><span class="p">(</span><span class="kd">function</span><span class="p">()</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-2">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-2">&#182;</a>               </div>               <p>Some unique objects for the implementation. Not much interesting here.</p>             </td>             <td class="code">               <div class="highlight"><pre>    <span class="kd">var</span> <span class="nx">_empty_list</span> 	<span class="o">=</span> <span class="p">{};</span>
+    <span class="kd">var</span> <span class="nx">_symbol_tag</span> 	<span class="o">=</span> <span class="p">{};</span>
+    <span class="kd">var</span> <span class="nx">_box_tag</span>    	<span class="o">=</span> <span class="p">{};</span>
+    <span class="kd">var</span> <span class="nx">_pair_tag</span>   	<span class="o">=</span> <span class="p">{};</span>
+    <span class="kd">var</span> <span class="nx">_symbols</span>    	<span class="o">=</span> <span class="p">{};</span></pre></div>             </td>           </tr>                               <tr id="section-3">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-3">&#182;</a>               </div>               <p><code>_primitive_cwcc</code> is an object representing the Scheme
+procedure <code>call-with-current-continuation</code>. This is called
+<em>primitive</em> here because by the time it is bound to it's Scheme
+name it will have been wrapped to provide <code>dynamic-wind</code>
+functionality. <strong>(<code>dynamic-wind</code> is not yet implemented.)</strong></p>             </td>             <td class="code">               <div class="highlight"><pre>    <span class="kd">var</span> <span class="nx">_primitive_cwcc</span> <span class="o">=</span> <span class="p">{</span><span class="nx">is_primitive_cwcc</span><span class="o">:</span><span class="kc">true</span><span class="p">};</span></pre></div>             </td>           </tr>                               <tr id="section-4">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-4">&#182;</a>               </div>               <p>This is the top-level lexical environment where the standard
+procedures are bound.</p>             </td>             <td class="code">               <div class="highlight"><pre>    <span class="kd">var</span> <span class="nx">_top_level</span> <span class="o">=</span> <span class="p">{</span><span class="nx">_parent</span><span class="o">:</span><span class="kc">null</span><span class="p">};</span></pre></div>             </td>           </tr>                               <tr id="section-5">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-5">&#182;</a>               </div>               <p>A <em>trampoline</em> avoids growing the Javascript stack by using a
+<em>bouncer</em>. The trampoline is given an initial bouncer. A
+bouncer ready to bounce has an array (possibly empty) of
+arguments. The trampoline applies these arguments to the
+bouncer. The bouncer does some work and returns a(nother)
+bouncer. This loop continues forever until the trampoline
+encounters a bouncer ready to land. A bouncer that lands has a
+value, and the trampoline returns this value to its caller.</p>             </td>             <td class="code">               <div class="highlight"><pre>    <span class="kd">function</span> <span class="nx">_trampoline</span><span class="p">(</span><span class="nx">bouncer</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">while</span> <span class="p">(</span><span class="kc">true</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">if</span> <span class="p">(</span><span class="nx">bouncer</span><span class="p">.</span><span class="nx">bounce</span><span class="p">)</span> <span class="p">{</span>
+		<span class="nx">bouncer</span> <span class="o">=</span> <span class="nx">bouncer</span><span class="p">.</span><span class="nx">bounce</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">bouncer</span><span class="p">.</span><span class="nx">argv</span><span class="p">);</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">isUndefined</span><span class="p">(</span><span class="nx">bouncer</span><span class="p">.</span><span class="nx">land</span><span class="p">))</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="nx">bouncer</span><span class="p">.</span><span class="nx">land</span><span class="p">;</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+		<span class="k">throw</span> <span class="s2">&quot;a trampoline bouncer must bounce or land: &quot;</span> <span class="o">+</span> <span class="nx">bouncer</span><span class="p">;</span>
+	    <span class="p">}</span>
+	<span class="p">}</span>
+    <span class="p">}</span></pre></div>             </td>           </tr>                               <tr id="section-6">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-6">&#182;</a>               </div>               <p>Call <code>_bounce</code> with any number of arguments. Makes a bouncer
+ready to bounce with an array of those arguments.</p>
+
+<p>Each specific bouncer's <code>fn</code> determines when it will return the
+next bouncer to the trampoline. A bouncer that performs more
+work requires less bouncing overhead. This is somewhat
+like "loop unrolling" by a compiler in order to execute N
+iterations of a loop without branching.</p>
+
+<p>In a single-threaded Javascript runtime though, this can starve
+other event-driven callbacks from executing.</p>
+
+<p>A <em>fair</em> trampoline (not implemented yet for NCONC) will yield
+time back to the runtime, e.g. setting a timer to continue the
+trampoline later.</p>             </td>             <td class="code">               <div class="highlight"><pre>    <span class="kd">function</span> <span class="nx">_bounce</span><span class="p">()</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">fn</span> <span class="o">=</span> <span class="nx">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+	<span class="kd">var</span> <span class="nx">argv</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">).</span><span class="nx">slice</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="k">return</span> <span class="p">{</span><span class="nx">bounce</span><span class="o">:</span> <span class="nx">fn</span><span class="p">,</span> <span class="nx">argv</span><span class="o">:</span> <span class="nx">argv</span><span class="p">};</span>
+    <span class="p">}</span></pre></div>             </td>           </tr>                               <tr id="section-7">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-7">&#182;</a>               </div>               <p>Call <code>_land</code> with a single value. Makes a bouncer ready to land
+with that value.</p>             </td>             <td class="code">               <div class="highlight"><pre>    <span class="kd">function</span> <span class="nx">_land</span><span class="p">(</span><span class="nx">value</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="p">{</span><span class="nx">land</span><span class="o">:</span> <span class="nx">value</span><span class="p">};</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_extendEnv</span><span class="p">(</span><span class="nx">parv</span><span class="p">,</span> <span class="nx">argv</span><span class="p">,</span> <span class="nx">parent_env</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">env</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">clone</span><span class="p">({</span><span class="nx">_parent</span><span class="o">:</span><span class="nx">parent_env</span><span class="p">});</span>
+	<span class="nx">_</span><span class="p">.</span><span class="nx">each</span><span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">zip</span><span class="p">(</span><span class="nx">parv</span><span class="p">,</span> <span class="nx">argv</span><span class="p">),</span> <span class="kd">function</span> <span class="p">(</span><span class="nx">pairv</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">sym</span> <span class="o">=</span> <span class="nx">pairv</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+	    <span class="kd">var</span> <span class="nx">val</span> <span class="o">=</span> <span class="nx">pairv</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+	    <span class="nx">env</span><span class="p">[</span><span class="nx">sym</span><span class="p">.</span><span class="nx">_name</span><span class="p">]</span> <span class="o">=</span> <span class="nx">_bind</span><span class="p">(</span><span class="nx">sym</span><span class="p">,</span> <span class="nx">val</span><span class="p">);</span>
+	<span class="p">});</span>
+	<span class="k">return</span> <span class="nx">env</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_stringToSymbol</span><span class="p">(</span><span class="nx">str</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">isString</span><span class="p">(</span><span class="nx">str</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;expected a string: &quot;</span> <span class="o">+</span> <span class="nx">str</span><span class="p">;</span> <span class="p">}</span>
+	<span class="kd">var</span> <span class="nx">lower</span> <span class="o">=</span> <span class="nx">str</span><span class="p">.</span><span class="nx">toLowerCase</span><span class="p">();</span>
+	<span class="k">return</span> <span class="nx">_intern</span><span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">clone</span><span class="p">({</span><span class="nx">_tag</span><span class="o">:</span><span class="nx">_symbol_tag</span><span class="p">,</span> <span class="nx">_name</span><span class="o">:</span><span class="nx">lower</span><span class="p">}));</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_symbolToString</span><span class="p">(</span><span class="nx">sym</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_isSymbol</span><span class="p">(</span><span class="nx">sym</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;expected a scheme symbol: &quot;</span> <span class="o">+</span> <span class="nx">sym</span><span class="p">;</span> <span class="p">}</span>
+	<span class="k">return</span> <span class="nx">sym</span><span class="p">.</span><span class="nx">_name</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_isSymbol</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">x</span> <span class="o">&amp;&amp;</span> <span class="nx">x</span><span class="p">.</span><span class="nx">_tag</span> <span class="o">&amp;&amp;</span> <span class="nx">x</span><span class="p">.</span><span class="nx">_tag</span> <span class="o">===</span> <span class="nx">_symbol_tag</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_intern</span><span class="p">(</span><span class="nx">sym</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_isSymbol</span><span class="p">(</span><span class="nx">sym</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;expected a scheme symbol: &quot;</span> <span class="o">+</span> <span class="nx">sym</span><span class="p">;</span> <span class="p">}</span>
+	<span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">_symbols</span><span class="p">[</span><span class="nx">sym</span><span class="p">.</span><span class="nx">_name</span><span class="p">];</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">result</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="nx">result</span> <span class="o">=</span> <span class="nx">sym</span><span class="p">;</span>
+	    <span class="nx">_symbols</span><span class="p">[</span><span class="nx">sym</span><span class="p">.</span><span class="nx">_name</span><span class="p">]</span> <span class="o">=</span> <span class="nx">sym</span><span class="p">;</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">result</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_cons</span><span class="p">(</span><span class="nx">car</span><span class="p">,</span> <span class="nx">cdr</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">clone</span><span class="p">({</span><span class="nx">_tag</span><span class="o">:</span><span class="nx">_pair_tag</span><span class="p">,</span> <span class="nx">_car</span><span class="o">:</span><span class="nx">car</span><span class="p">,</span> <span class="nx">_cdr</span><span class="o">:</span><span class="nx">cdr</span><span class="p">});</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_list</span><span class="p">(</span><span class="nx">obj</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">_cons</span><span class="p">(</span><span class="nx">obj</span><span class="p">,</span> <span class="nx">_empty_list</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">pair</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">pair</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;expected a scheme pair: &quot;</span> <span class="o">+</span> <span class="nx">pair</span><span class="p">;</span> <span class="p">}</span>
+	<span class="k">return</span> <span class="nx">pair</span><span class="p">.</span><span class="nx">_car</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">pair</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">pair</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;expected a scheme pair: &quot;</span> <span class="o">+</span> <span class="nx">pair</span><span class="p">;</span> <span class="p">}</span>
+	<span class="k">return</span> <span class="nx">pair</span><span class="p">.</span><span class="nx">_cdr</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_isEmptyList</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">x</span> <span class="o">===</span> <span class="nx">_empty_list</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_isPair</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">x</span> <span class="o">&amp;&amp;</span> <span class="nx">x</span><span class="p">.</span><span class="nx">_tag</span> <span class="o">&amp;&amp;</span> <span class="nx">x</span><span class="p">.</span><span class="nx">_tag</span> <span class="o">===</span> <span class="nx">_pair_tag</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_first</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">isArray</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="nx">list</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">list</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">list</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">list</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+	    <span class="k">throw</span> <span class="s2">&quot;expected a list or an array: &quot;</span> <span class="o">+</span> <span class="nx">list</span><span class="p">;</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_second</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">isArray</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="nx">list</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">list</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">list</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">_cdr</span><span class="p">(</span><span class="nx">list</span><span class="p">));</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+	    <span class="k">throw</span> <span class="s2">&quot;expected a list or an array: &quot;</span> <span class="o">+</span> <span class="nx">list</span><span class="p">;</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_third</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">isArray</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="nx">list</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">list</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">list</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">_cdr</span><span class="p">(</span><span class="nx">_cdr</span><span class="p">(</span><span class="nx">list</span><span class="p">)));</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+	    <span class="k">throw</span> <span class="s2">&quot;expected a list or an array: &quot;</span> <span class="o">+</span> <span class="nx">list</span><span class="p">;</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_fourthOrFalse</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="kc">false</span><span class="p">;</span>
+	<span class="k">try</span> <span class="p">{</span>
+	    <span class="nx">result</span> <span class="o">=</span> <span class="nx">_fourth</span><span class="p">(</span><span class="nx">list</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="nx">ex</span><span class="p">)</span> <span class="p">{}</span>
+	<span class="k">return</span> <span class="nx">result</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_fourth</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">isArray</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="nx">list</span><span class="p">.</span><span class="nx">length</span> <span class="o">&gt;</span> <span class="mi">3</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">list</span><span class="p">[</span><span class="mi">3</span><span class="p">];</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">list</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">_cdr</span><span class="p">(</span><span class="nx">_cdr</span><span class="p">(</span><span class="nx">_cdr</span><span class="p">(</span><span class="nx">list</span><span class="p">))));</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+	    <span class="k">throw</span> <span class="s2">&quot;expected a list or an array: &quot;</span> <span class="o">+</span> <span class="nx">list</span><span class="p">;</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_listLength</span><span class="p">(</span><span class="nx">pair</span><span class="p">,</span> <span class="nx">n</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">n</span> <span class="o">=</span> <span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">isUndefined</span><span class="p">(</span><span class="nx">n</span><span class="p">))</span> <span class="o">?</span> <span class="mi">1</span> <span class="o">:</span> <span class="nx">n</span><span class="o">+</span><span class="mi">1</span><span class="p">;</span>
+	<span class="kd">var</span> <span class="nx">cdr</span> <span class="o">=</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">pair</span><span class="p">);</span>
+	<span class="k">while</span> <span class="p">(</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">cdr</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="nx">n</span><span class="o">++</span><span class="p">;</span>
+	    <span class="nx">cdr</span> <span class="o">=</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">cdr</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">n</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_length</span><span class="p">(</span><span class="nx">obj</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">isArray</span><span class="p">(</span><span class="nx">obj</span><span class="p">))</span>
+	    <span class="k">return</span> <span class="nx">obj</span><span class="p">.</span><span class="nx">length</span><span class="p">;</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">obj</span><span class="p">))</span>
+	    <span class="k">return</span> <span class="nx">_listLength</span><span class="p">(</span><span class="nx">obj</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">_isEmptyList</span><span class="p">(</span><span class="nx">obj</span><span class="p">))</span>
+	    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+	<span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">size</span><span class="p">(</span><span class="nx">obj</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_minus</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">arguments</span><span class="p">.</span><span class="nx">length</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;- expects at least one number: &quot;</span> <span class="o">+</span> <span class="nx">arguments</span><span class="p">;</span> <span class="p">}</span>
+	<span class="kd">var</span> <span class="nx">first</span>  <span class="o">=</span> <span class="nx">arguments</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+	<span class="kd">var</span> <span class="nx">rest</span>   <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">).</span><span class="nx">slice</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">rest</span><span class="p">.</span><span class="nx">length</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="o">-</span><span class="nx">first</span><span class="p">;</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">reduce</span><span class="p">(</span><span class="nx">rest</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">memo</span><span class="p">,</span> <span class="nx">n</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="nx">memo</span> <span class="o">-</span> <span class="nx">n</span><span class="p">;</span>
+	    <span class="p">},</span> <span class="nx">first</span><span class="p">);</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_plus</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">reduce</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">memo</span><span class="p">,</span> <span class="nx">n</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">memo</span> <span class="o">+</span> <span class="nx">n</span><span class="p">;</span>
+	<span class="p">},</span> <span class="mi">0</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_mult</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">reduce</span><span class="p">(</span><span class="nx">arguments</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">memo</span><span class="p">,</span> <span class="nx">n</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">memo</span> <span class="o">*</span> <span class="nx">n</span><span class="p">;</span>
+	<span class="p">},</span> <span class="mi">1</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_equal</span><span class="p">()</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">arguments</span><span class="p">.</span><span class="nx">length</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;= expects at least two numbers: &quot;</span> <span class="o">+</span> <span class="nx">arguments</span><span class="p">;</span> <span class="p">}</span>
+	<span class="kd">var</span> <span class="nx">argv</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">toArray</span><span class="p">(</span><span class="nx">arguments</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">all</span><span class="p">(</span><span class="nx">argv</span><span class="p">,</span> <span class="nx">_</span><span class="p">.</span><span class="nx">isNumber</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;= expects all arguments to be numbers: &quot;</span> <span class="o">+</span> <span class="nx">argv</span><span class="p">;</span> <span class="p">}</span>
+	<span class="kd">var</span> <span class="nx">first</span> <span class="o">=</span> <span class="nx">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+	<span class="kd">var</span> <span class="nx">rest</span>  <span class="o">=</span> <span class="nx">argv</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+	<span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">all</span><span class="p">(</span><span class="nx">rest</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">n</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">first</span> <span class="o">==</span> <span class="nx">n</span><span class="p">;</span>
+	<span class="p">});</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_listToVector</span><span class="p">(</span><span class="nx">list</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="p">[];</span>
+	<span class="kd">var</span> <span class="nx">next</span> <span class="o">=</span> <span class="nx">list</span><span class="p">;</span>
+	<span class="k">while</span> <span class="p">(</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">next</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="nx">result</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">_car</span><span class="p">(</span><span class="nx">next</span><span class="p">));</span>
+	    <span class="nx">next</span> <span class="o">=</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">next</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_isEmptyList</span><span class="p">(</span><span class="nx">next</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;expected a proper list: &quot;</span> <span class="o">+</span> <span class="nx">list</span><span class="p">;</span> <span class="p">}</span>
+	<span class="k">return</span> <span class="nx">result</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_identity</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">x</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_bind</span><span class="p">(</span><span class="nx">sym</span><span class="p">,</span> <span class="nx">val</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">clone</span><span class="p">({</span><span class="nx">_symbol</span><span class="o">:</span> <span class="nx">sym</span><span class="p">,</span> <span class="nx">_value</span><span class="o">:</span><span class="nx">val</span> <span class="p">});</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_findBinding</span><span class="p">(</span><span class="nx">str</span><span class="p">,</span> <span class="nx">env</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">e</span> <span class="o">=</span> <span class="nx">env</span><span class="p">;</span>
+	<span class="kd">var</span> <span class="nx">b</span> <span class="o">=</span> <span class="nx">e</span><span class="p">[</span><span class="nx">str</span><span class="p">];</span>
+	<span class="k">while</span> <span class="p">(</span><span class="nx">_</span><span class="p">.</span><span class="nx">isUndefined</span><span class="p">(</span><span class="nx">b</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">isNull</span><span class="p">(</span><span class="nx">e</span><span class="p">.</span><span class="nx">_parent</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="nx">e</span> <span class="o">=</span> <span class="nx">e</span><span class="p">.</span><span class="nx">_parent</span><span class="p">;</span>
+	    <span class="nx">b</span> <span class="o">=</span> <span class="nx">e</span><span class="p">[</span><span class="nx">str</span><span class="p">];</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">b</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_evalSymbol</span><span class="p">(</span><span class="nx">sym</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">b</span> <span class="o">=</span> <span class="nx">_findBinding</span><span class="p">(</span><span class="nx">sym</span><span class="p">.</span><span class="nx">_name</span><span class="p">,</span> <span class="nx">env</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">b</span><span class="p">)</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;the symbol is unbound: &quot;</span> <span class="o">+</span> <span class="p">((</span><span class="nx">sexpr</span><span class="p">.</span><span class="nx">_name</span><span class="p">)</span> <span class="o">?</span> <span class="nx">sexpr</span><span class="p">.</span><span class="nx">_name</span> <span class="o">:</span> <span class="nx">sexpr</span><span class="p">);</span> <span class="p">}</span>
+	<span class="k">return</span> <span class="nx">k</span><span class="p">(</span><span class="nx">b</span><span class="p">.</span><span class="nx">_value</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_evalAssignment</span><span class="p">(</span><span class="nx">sym</span><span class="p">,</span> <span class="nx">form</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">k_prime</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">val</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">b</span> <span class="o">=</span> <span class="nx">_findBinding</span><span class="p">(</span><span class="nx">sym</span><span class="p">.</span><span class="nx">_name</span><span class="p">,</span> <span class="nx">env</span><span class="p">);</span>
+	    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">b</span><span class="p">)</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;cannot set! and undefined variable: &quot;</span> <span class="o">+</span> <span class="nx">sym</span><span class="p">.</span><span class="nx">_name</span><span class="p">;</span> <span class="p">}</span>
+	    <span class="nx">b</span><span class="p">.</span><span class="nx">_value</span> <span class="o">=</span> <span class="nx">val</span><span class="p">;</span>
+	    <span class="k">return</span> <span class="nx">k</span><span class="p">(</span><span class="nx">val</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">form</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k_prime</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_evalDefine</span><span class="p">(</span><span class="nx">sym</span><span class="p">,</span> <span class="nx">form</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">k_prime</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">val</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="nx">env</span><span class="p">[</span><span class="nx">sym</span><span class="p">.</span><span class="nx">_name</span><span class="p">]</span> <span class="o">=</span> <span class="nx">_bind</span><span class="p">(</span><span class="nx">sym</span><span class="p">,</span> <span class="nx">val</span><span class="p">);</span>
+	    <span class="k">return</span> <span class="nx">k</span><span class="p">(</span><span class="nx">val</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">form</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k_prime</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_makeBeginRestK</span><span class="p">(</span><span class="nx">rest</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="kd">function</span><span class="p">(</span><span class="nx">val</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">n</span> <span class="o">=</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">rest</span><span class="p">);</span>
+	    <span class="kd">var</span> <span class="nx">r</span> <span class="o">=</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">rest</span><span class="p">);</span>
+	    <span class="kd">var</span> <span class="nx">k_prime</span> <span class="o">=</span> <span class="p">(</span><span class="nx">_isEmptyList</span><span class="p">(</span><span class="nx">r</span><span class="p">))</span> <span class="o">?</span> <span class="nx">k</span> <span class="o">:</span> <span class="nx">_makeBeginRestK</span><span class="p">(</span><span class="nx">r</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	    <span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">n</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k_prime</span><span class="p">);</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_evalBegin</span><span class="p">(</span><span class="nx">forms</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">next</span> <span class="o">=</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">forms</span><span class="p">);</span>
+	<span class="kd">var</span> <span class="nx">rest</span> <span class="o">=</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">forms</span><span class="p">);</span>
+	<span class="kd">var</span> <span class="nx">k_prime</span> <span class="o">=</span> <span class="p">(</span><span class="nx">_isEmptyList</span><span class="p">(</span><span class="nx">rest</span><span class="p">))</span> <span class="o">?</span> <span class="kd">function</span><span class="p">(</span><span class="nx">val</span><span class="p">)</span> <span class="p">{</span> <span class="k">return</span> <span class="nx">k</span><span class="p">(</span><span class="nx">val</span><span class="p">);</span> <span class="p">}</span> <span class="o">:</span> <span class="nx">_makeBeginRestK</span><span class="p">(</span><span class="nx">rest</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	<span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">next</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k_prime</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_isProcedure</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">isFunction</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="o">||</span> <span class="nx">x</span><span class="p">.</span><span class="nx">is_lambda</span> <span class="o">||</span> <span class="nx">x</span><span class="p">.</span><span class="nx">is_primitive_cwcc</span><span class="p">;</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_apply</span><span class="p">(</span><span class="nx">proc</span><span class="p">,</span> <span class="nx">argv</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">proc</span><span class="p">.</span><span class="nx">is_lambda</span><span class="p">)</span> <span class="p">{</span></pre></div>             </td>           </tr>                               <tr id="section-8">             <td class="docs">               <div class="pilwrap">                 <a class="pilcrow" href="#section-8">&#182;</a>               </div>               <p>Not implemented yet... need an environment stack.
+var dynamic_env = env;</p>             </td>             <td class="code">               <div class="highlight"><pre>	    <span class="kd">var</span> <span class="nx">lexical_env</span> <span class="o">=</span> <span class="nx">proc</span><span class="p">.</span><span class="nx">env</span><span class="p">;</span>
+	    <span class="kd">var</span> <span class="nx">env_prime</span>   <span class="o">=</span> <span class="nx">_extendEnv</span><span class="p">(</span><span class="nx">proc</span><span class="p">.</span><span class="nx">params</span><span class="p">,</span> <span class="nx">argv</span><span class="p">,</span> <span class="nx">lexical_env</span><span class="p">);</span>
+	    <span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">proc</span><span class="p">.</span><span class="nx">body</span><span class="p">,</span> <span class="nx">env_prime</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">proc</span><span class="p">.</span><span class="nx">is_primitive_cwcc</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">if</span> <span class="p">(</span><span class="nx">argv</span><span class="p">.</span><span class="nx">length</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;call-with-current-continuation expects one argument: &quot;</span> <span class="o">+</span> <span class="nx">sexpr</span><span class="p">;</span> <span class="p">}</span>
+	    <span class="kd">var</span> <span class="nx">p</span> <span class="o">=</span> <span class="nx">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+	    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_isProcedure</span><span class="p">(</span><span class="nx">p</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;call-with-current-continuation expects a procedure: &quot;</span> <span class="o">+</span> <span class="nx">sexpr</span><span class="p">;</span> <span class="p">}</span>
+	    <span class="nx">k</span><span class="p">.</span><span class="nx">is_continuation</span> <span class="o">=</span> <span class="kc">true</span><span class="p">;</span>
+	    <span class="k">return</span> <span class="nx">_apply</span><span class="p">(</span><span class="nx">p</span><span class="p">,</span> <span class="p">[</span><span class="nx">k</span><span class="p">],</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">proc</span><span class="p">.</span><span class="nx">is_continuation</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">v</span> <span class="o">=</span> <span class="nx">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+	    <span class="k">return</span> <span class="nx">proc</span><span class="p">(</span><span class="nx">v</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">result</span> <span class="o">=</span> <span class="nx">proc</span><span class="p">.</span><span class="nx">apply</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">argv</span><span class="p">);</span>
+	    <span class="k">return</span> <span class="nx">k</span><span class="p">(</span><span class="nx">result</span><span class="p">);</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_makeCombRestK</span><span class="p">(</span><span class="nx">argv</span><span class="p">,</span> <span class="nx">rest</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="kd">function</span><span class="p">(</span><span class="nx">val</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">n</span> <span class="o">=</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">rest</span><span class="p">);</span>
+	    <span class="kd">var</span> <span class="nx">r</span> <span class="o">=</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">rest</span><span class="p">);</span>
+	    <span class="kd">var</span> <span class="nx">a</span> <span class="o">=</span> <span class="nx">argv</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+	    <span class="nx">a</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">val</span><span class="p">);</span>
+	    <span class="kd">var</span> <span class="nx">k_prime</span> <span class="o">=</span> <span class="p">(</span><span class="nx">_isEmptyList</span><span class="p">(</span><span class="nx">r</span><span class="p">))</span> <span class="o">?</span> <span class="nx">_makeCombApplyK</span><span class="p">(</span><span class="nx">a</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="o">:</span> <span class="nx">_makeCombRestK</span><span class="p">(</span><span class="nx">a</span><span class="p">,</span> <span class="nx">r</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	    <span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">n</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k_prime</span><span class="p">);</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_makeCombApplyK</span><span class="p">(</span><span class="nx">argv</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="kd">function</span><span class="p">(</span><span class="nx">val</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">proc</span> <span class="o">=</span> <span class="kc">null</span><span class="p">;</span>
+	    <span class="kd">var</span> <span class="nx">a</span> <span class="o">=</span> <span class="p">[];</span>
+	    <span class="k">if</span> <span class="p">(</span><span class="nx">argv</span><span class="p">.</span><span class="nx">length</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+		<span class="nx">proc</span> <span class="o">=</span> <span class="nx">val</span><span class="p">;</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+		<span class="nx">proc</span> <span class="o">=</span> <span class="nx">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">];</span>
+		<span class="nx">a</span> <span class="o">=</span> <span class="nx">argv</span><span class="p">.</span><span class="nx">slice</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+		<span class="nx">a</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">val</span><span class="p">);</span>
+	    <span class="p">}</span>
+	    <span class="k">return</span> <span class="nx">_apply</span><span class="p">(</span><span class="nx">proc</span><span class="p">,</span> <span class="nx">a</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_evalCombination</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">argv</span>  <span class="o">=</span> <span class="p">[];</span>
+	<span class="kd">var</span> <span class="nx">next</span> <span class="o">=</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+	<span class="kd">var</span> <span class="nx">rest</span>  <span class="o">=</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+	<span class="kd">var</span> <span class="nx">k_prime</span> <span class="o">=</span> <span class="p">(</span><span class="nx">_isEmptyList</span><span class="p">(</span><span class="nx">rest</span><span class="p">))</span> <span class="o">?</span> <span class="nx">_makeCombApplyK</span><span class="p">([],</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="o">:</span> <span class="nx">_makeCombRestK</span><span class="p">([],</span> <span class="nx">rest</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	<span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">next</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k_prime</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_evalIf</span><span class="p">(</span><span class="nx">conditional</span><span class="p">,</span> <span class="nx">then_form</span><span class="p">,</span> <span class="nx">else_form</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">k_prime</span> <span class="o">=</span> <span class="kd">function</span><span class="p">(</span><span class="nx">val</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">consequent</span> <span class="o">=</span> <span class="p">(</span><span class="nx">val</span><span class="p">)</span> <span class="o">?</span> <span class="nx">then_form</span> <span class="o">:</span> <span class="nx">else_form</span><span class="p">;</span>
+	    <span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">consequent</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="nx">_bounce</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">,</span> <span class="nx">conditional</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k_prime</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_evalLambda</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">proc</span> <span class="o">=</span> <span class="nx">_</span><span class="p">.</span><span class="nx">clone</span><span class="p">({</span><span class="nx">is_lambda</span><span class="o">:</span><span class="kc">true</span><span class="p">});</span>
+	<span class="nx">proc</span><span class="p">.</span><span class="nx">params</span> <span class="o">=</span> <span class="nx">_listToVector</span><span class="p">(</span><span class="nx">_second</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">));</span>
+	<span class="kd">var</span> <span class="nx">forms</span>   <span class="o">=</span> <span class="nx">_cdr</span><span class="p">(</span><span class="nx">_cdr</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">));</span>
+	<span class="kd">var</span> <span class="nx">n</span> <span class="o">=</span> <span class="nx">_length</span><span class="p">(</span><span class="nx">forms</span><span class="p">);</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">n</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="nx">proc</span><span class="p">.</span><span class="nx">body</span> <span class="o">=</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">forms</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+	    <span class="nx">proc</span><span class="p">.</span><span class="nx">body</span> <span class="o">=</span> <span class="nx">_cons</span><span class="p">(</span><span class="nx">_begin</span><span class="p">,</span> <span class="nx">forms</span><span class="p">);</span>
+	<span class="p">}</span>
+	<span class="nx">proc</span><span class="p">.</span><span class="nx">env</span> <span class="o">=</span> <span class="nx">env</span><span class="p">;</span>
+	<span class="k">return</span> <span class="nx">k</span><span class="p">(</span><span class="nx">proc</span><span class="p">);</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_evalTramp</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">if</span> <span class="p">(</span><span class="nx">_isSymbol</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_evalSymbol</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">_isPair</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">))</span> <span class="p">{</span>
+	    <span class="kd">var</span> <span class="nx">first</span> <span class="o">=</span> <span class="nx">_car</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+	    <span class="k">if</span> <span class="p">(</span><span class="nx">first</span> <span class="o">===</span> <span class="nx">_quote</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="nx">k</span><span class="p">(</span><span class="nx">_second</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">));</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">first</span> <span class="o">===</span> <span class="nx">_define</span><span class="p">)</span> <span class="p">{</span>
+		<span class="kd">var</span> <span class="nx">def_sym</span>  <span class="o">=</span> <span class="nx">_second</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+		<span class="kd">var</span> <span class="nx">def_form</span> <span class="o">=</span> <span class="nx">_third</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+		<span class="k">return</span> <span class="nx">_evalDefine</span><span class="p">(</span><span class="nx">def_sym</span><span class="p">,</span> <span class="nx">def_form</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">first</span> <span class="o">===</span> <span class="nx">_set</span><span class="p">)</span> <span class="p">{</span>
+		<span class="kd">var</span> <span class="nx">set_sym</span>  <span class="o">=</span> <span class="nx">_second</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+		<span class="kd">var</span> <span class="nx">set_form</span> <span class="o">=</span> <span class="nx">_third</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+		<span class="k">return</span> <span class="nx">_evalAssignment</span><span class="p">(</span><span class="nx">set_sym</span><span class="p">,</span> <span class="nx">set_form</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">first</span> <span class="o">===</span> <span class="nx">_if</span><span class="p">)</span> <span class="p">{</span>
+		<span class="kd">var</span> <span class="nx">conditional</span> <span class="o">=</span> <span class="nx">_second</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+		<span class="kd">var</span> <span class="nx">then_form</span>   <span class="o">=</span> <span class="nx">_third</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+		<span class="kd">var</span> <span class="nx">else_form</span>   <span class="o">=</span> <span class="nx">_fourthOrFalse</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+		<span class="k">return</span> <span class="nx">_evalIf</span><span class="p">(</span><span class="nx">conditional</span><span class="p">,</span> <span class="nx">then_form</span><span class="p">,</span> <span class="nx">else_form</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">first</span> <span class="o">===</span> <span class="nx">_lambda</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="nx">_evalLambda</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="nx">first</span> <span class="o">===</span> <span class="nx">_begin</span><span class="p">)</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="nx">_evalBegin</span><span class="p">(</span><span class="nx">_cdr</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">),</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	    <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+		<span class="k">return</span> <span class="nx">_evalCombination</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">k</span><span class="p">);</span>
+	    <span class="p">}</span>
+	<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">k</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">);</span>
+	<span class="p">}</span>
+    <span class="p">}</span>
+
+    <span class="kd">function</span> <span class="nx">_eval</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="nx">_trampoline</span><span class="p">(</span><span class="nx">_evalTramp</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">,</span> <span class="nx">_land</span><span class="p">));</span>
+    <span class="p">}</span>
+
+    <span class="nx">_</span><span class="p">.</span><span class="nx">mixin</span><span class="p">({</span>
+	<span class="nx">trampoline</span><span class="o">:</span> <span class="nx">_trampoline</span><span class="p">,</span>
+	<span class="nx">bounce</span><span class="o">:</span>     <span class="nx">_bounce</span><span class="p">,</span>
+	<span class="nx">land</span><span class="o">:</span>       <span class="nx">_land</span><span class="p">,</span>
+	<span class="nx">schemeRead</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">str</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">parser</span><span class="p">.</span><span class="nx">parse</span><span class="p">(</span><span class="nx">str</span><span class="p">);</span>
+	<span class="p">},</span>
+	<span class="nx">schemeEmptyList</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_empty_list</span><span class="p">;</span>
+	<span class="p">},</span>
+	<span class="nx">schemeQuote</span><span class="o">:</span> <span class="kd">function</span><span class="p">()</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_quote</span><span class="p">;</span>
+	<span class="p">},</span>
+	<span class="nx">schemeBox</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_</span><span class="p">.</span><span class="nx">clone</span><span class="p">({</span><span class="nx">_tag</span><span class="o">:</span><span class="nx">_box_tag</span><span class="p">,</span> <span class="nx">_contents</span><span class="o">:</span><span class="nx">x</span><span class="p">});</span>
+	<span class="p">},</span>
+	<span class="nx">schemeUnbox</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">box</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">isSchemeBox</span><span class="p">(</span><span class="nx">box</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;expected a scheme box: &quot;</span> <span class="o">+</span> <span class="nx">box</span><span class="p">;</span> <span class="p">}</span>
+	    <span class="k">return</span> <span class="nx">box</span><span class="p">.</span><span class="nx">_contents</span><span class="p">;</span>
+	<span class="p">},</span>
+	<span class="nx">schemeSetBox</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">box</span><span class="p">,</span> <span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">_</span><span class="p">.</span><span class="nx">isSchemeBox</span><span class="p">(</span><span class="nx">box</span><span class="p">))</span> <span class="p">{</span> <span class="k">throw</span> <span class="s2">&quot;expected a scheme box: &quot;</span> <span class="o">+</span> <span class="nx">box</span><span class="p">;</span> <span class="p">}</span>
+	    <span class="nx">box</span><span class="p">.</span><span class="nx">_contents</span> <span class="o">=</span> <span class="nx">x</span><span class="p">;</span>
+	<span class="p">},</span>
+	<span class="nx">isSchemeBox</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">x</span> <span class="o">&amp;&amp;</span> <span class="nx">x</span><span class="p">.</span><span class="nx">_tag</span> <span class="o">&amp;&amp;</span> <span class="nx">x</span><span class="p">.</span><span class="nx">_tag</span> <span class="o">===</span> <span class="nx">_box_tag</span><span class="p">;</span>
+	<span class="p">},</span>
+	<span class="nx">isSchemeLambda</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">x</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="o">!!</span><span class="nx">x</span><span class="p">.</span><span class="nx">is_lambda</span><span class="p">;</span>
+	<span class="p">},</span>
+	<span class="nx">schemeEval</span><span class="o">:</span> <span class="kd">function</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span><span class="p">)</span> <span class="p">{</span>
+	    <span class="k">return</span> <span class="nx">_eval</span><span class="p">(</span><span class="nx">sexpr</span><span class="p">,</span> <span class="nx">env</span> <span class="o">||</span> <span class="nx">_top_level</span><span class="p">);</span>
+	<span class="p">},</span>
+	<span class="nx">schemeList</span><span class="o">:</span>           <span class="nx">_list</span><span class="p">,</span>
+	<span class="nx">schemeStringToSymbol</span><span class="o">:</span> <span class="nx">_stringToSymbol</span><span class="p">,</span>
+	<span class="nx">schemeSymbolToString</span><span class="o">:</span> <span class="nx">_symbolToString</span><span class="p">,</span>
+	<span class="nx">isSchemeSymbol</span><span class="o">:</span>       <span class="nx">_isSymbol</span><span class="p">,</span>
+	<span class="nx">isSchemeEmptyList</span><span class="o">:</span>    <span class="nx">_isEmptyList</span><span class="p">,</span>
+	<span class="nx">isSchemePair</span><span class="o">:</span>         <span class="nx">_isPair</span><span class="p">,</span>
+	<span class="nx">schemeCons</span><span class="o">:</span>   	      <span class="nx">_cons</span><span class="p">,</span>
+	<span class="nx">schemeCar</span><span class="o">:</span>    	      <span class="nx">_car</span><span class="p">,</span>
+	<span class="nx">schemeCdr</span><span class="o">:</span>    	      <span class="nx">_cdr</span><span class="p">,</span>
+	<span class="nx">schemeLength</span><span class="o">:</span> 	      <span class="nx">_length</span><span class="p">,</span>
+	<span class="nx">schemeListToVector</span><span class="o">:</span>   <span class="nx">_listToVector</span>
+
+    <span class="p">});</span>
+
+    <span class="kd">var</span> <span class="nx">_scheme_builtins</span> <span class="o">=</span> <span class="p">{</span>
+	<span class="s2">&quot;*&quot;</span><span class="o">:</span><span class="nx">_mult</span><span class="p">,</span>
+	<span class="s2">&quot;+&quot;</span><span class="o">:</span><span class="nx">_plus</span><span class="p">,</span>
+	<span class="s2">&quot;-&quot;</span><span class="o">:</span><span class="nx">_minus</span><span class="p">,</span>
+	<span class="s2">&quot;=&quot;</span><span class="o">:</span><span class="nx">_equal</span><span class="p">,</span>
+	<span class="s2">&quot;primitive-cwcc&quot;</span><span class="o">:</span><span class="nx">_primitive_cwcc</span><span class="p">,</span>
+    <span class="p">};</span>
+
+    <span class="nx">_</span><span class="p">.</span><span class="nx">each</span><span class="p">(</span><span class="nx">_scheme_builtins</span><span class="p">,</span> <span class="kd">function</span><span class="p">(</span><span class="nx">value</span><span class="p">,</span> <span class="nx">key</span><span class="p">)</span> <span class="p">{</span>
+	<span class="kd">var</span> <span class="nx">sym</span> <span class="o">=</span> <span class="nx">_stringToSymbol</span><span class="p">(</span><span class="nx">key</span><span class="p">);</span>
+	<span class="nx">_top_level</span><span class="p">[</span><span class="nx">key</span><span class="p">]</span> <span class="o">=</span> <span class="nx">_bind</span><span class="p">(</span><span class="nx">sym</span><span class="p">,</span> <span class="nx">value</span><span class="p">);</span>
+    <span class="p">});</span>
+
+    <span class="kd">var</span> <span class="nx">_begin</span>   <span class="o">=</span> <span class="nx">_stringToSymbol</span><span class="p">(</span><span class="s2">&quot;begin&quot;</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">_define</span>  <span class="o">=</span> <span class="nx">_stringToSymbol</span><span class="p">(</span><span class="s2">&quot;define&quot;</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">_if</span>      <span class="o">=</span> <span class="nx">_stringToSymbol</span><span class="p">(</span><span class="s2">&quot;if&quot;</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">_lambda</span>  <span class="o">=</span> <span class="nx">_stringToSymbol</span><span class="p">(</span><span class="s2">&quot;lambda&quot;</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">_quote</span>   <span class="o">=</span> <span class="nx">_stringToSymbol</span><span class="p">(</span><span class="s2">&quot;quote&quot;</span><span class="p">);</span>
+    <span class="kd">var</span> <span class="nx">_set</span>     <span class="o">=</span> <span class="nx">_stringToSymbol</span><span class="p">(</span><span class="s2">&quot;set!&quot;</span><span class="p">);</span>
+
+<span class="p">}());</span>
+
+</pre></div>             </td>           </tr>                </tbody>     </table>   </div> </body> </html> 

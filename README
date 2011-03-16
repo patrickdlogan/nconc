@@ -1,0 +1,113 @@
+* COPYING
+
+This file is part of NCONC.
+
+NCONC is free software: you can redistribute it and/or modify it under
+the terms of the Lesser GNU General Public License as published by the
+Free Software Foundation, either version 3 of the License, or (at your
+option) any later version.
+
+NCONC is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the Lesser GNU General Public
+License for more details.
+
+You should have received a copy of the Lesser GNU General Public
+License along with NCONC. See the files COPYING.LESSER and COPYING. If
+these files are not present, see http://www.gnu.org/licenses/
+
+* LICENSE
+
+Copyright (C) 2011 Patrick Logan
+
+Distributed under the terms of the GNU LESSER GENERAL PUBLIC LICENSE, Version 3.
+
+ in this distribution for license information.
+
+See also http://www.gnu.org/licenses/
+
+* CONTACT
+
+patrickdlogan uses gmail
+
+* NCONC
+
+NCONC is an implementation of Scheme (a dialect of Lisp) written in
+Javascript.
+
+* Usage
+** Include the nconc.js script and dependencies.
+** Read scheme expressions from javascript: _.schemeRead("...")
+** Evaluate scheme expressions from javascript:
+var sexpr = _.schemeRead("((lambda (x) (- x)) -7)");
+var value = _.schemeEval(sexpr);
+// => value is 7.
+
+Generate the parser:
+
+This can be done within a javascript script, from the online pegjs
+grammer generator, or from a shell.
+
+From a shell:
+
+public/scripts/genparser.sh
+
+Testing:
+
+From a shell:
+
+"public/scripts/testonce.sh" will run the qunit tests using phantomjs
+once.
+
+"public/scripts/test.sh" will run the qunit tests when any file in
+public/ is saved. This uses inotifywait in a loop.
+
+"lein run" will start a server. Goto
+http://localhost:8383/nconc-test.html to run the qunit tests. This is
+useful, for example, running in FF or Chrome to see exceptions and/or
+to use their dev tools.
+
+A browser is needed to test long-running code. phantomjs currently has
+a problem.
+
+* TODO
+** dynamic-wind
+** Fluids
+** Multi-processing with trampolines
+** Other stuff with trampolines
+** Expansion Passing Style macros (stepper, tracer, debugger, etc.)
+** List (and array) comprehension macro(s).
+** Timer-based execution of the trampoline.
+** Printing
+** User Interface (read-eval-print loop)
+*** Influences: CLIM, Don't Fidget With Widgets, Xeel
+*** Declarative UI code with fluids and pub/sub
+** More of everything (standard library).
+
+* INCLUDED DEPENDENCIES:
+** jquery - not used much except to run qunit in the browser.
+** qunit - the unit tests are written in qunit.
+** underscore.js - run-time library for collections, etc.
+ 
+* Separate Dependencies:
+ 
+** clojure's lein build tool - currently used just to run qunit tests and serve the files via http.
+*** lein is installed from a shell script and all other dependencies from there.
+*** download the lein shell script, make it executable, and located on the PATH.
+*** run "lein self-install"
+*** at the top-level directory for nconc, run "lein deps"
+*** from the same location, run "lein run"
+*** goto http://localhost:8383/nconc-test.html and the tests should have been successful.
+** phantomjs - used to run the qunit tests from a shell using a "headless" webkit.
+*** requires qt 4.7 or greater and libqtwebkit4
+*** install build-essential
+*** install libqtwebkit4
+*** install qt4-qmake
+*** install libqt4-dev
+*** make sure phantomjs is located on the PATH
+*** from the top-level for nconc, run "public/scripts/testonce.sh"
+*** there should be no output when the tests are successful
+ 
+** PEG.js - used to build the parser. a pre-built parser is included for the current grammar at runtime.
+** the parser can be generated online at http://pegjs.majda.cz/online
+** or it can be generated from the shell but nodejs and jake are required.
