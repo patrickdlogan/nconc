@@ -109,9 +109,6 @@ alphanum
   = [a-zA-Z0-9]
 
 number
-  = number
-
-number
   = int_:int frac:frac exp:exp { return parseFloat(int_ + frac + exp); }
   / int_:int frac:frac         { return parseFloat(int_ + frac);       }
   / int_:int exp:exp           { return parseFloat(int_ + exp);        }

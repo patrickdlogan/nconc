@@ -1,1 +1,1 @@
-pegjs -e parser public/scripts/nconc.pegjs public/scripts/parser.js
+pegjs -e parser nconc.pegjs parser.js
