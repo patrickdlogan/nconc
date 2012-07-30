@@ -103,7 +103,7 @@
     function _trampoline(bouncer, ticks) {
 	var ticker = ticks;
 	while (true) {
-	    if (!_.isUndefined(bouncer.land)) {
+	    if (bouncer.hasOwnProperty('land')) {
 		return bouncer.land;
 	    } else if (ticker == 0) {
 		return bouncer;
