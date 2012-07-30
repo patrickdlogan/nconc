@@ -533,6 +533,10 @@
 	return _trampoline(_evalTramp(sexpr, env, _land), ticks);
     }
 
+    function _define(symbol, func) {
+	_top_level[symbol] = _bind(_stringToSymbol(symbol), func);
+    }
+
     _.mixin({
 	trampoline: _trampoline,
 	bounce:     _bounce,
@@ -583,8 +587,8 @@
 	schemeCar:    	      _car,
 	schemeCdr:    	      _cdr,
 	schemeLength: 	      _length,
-	schemeListToVector:   _listToVector
-
+	schemeListToVector:   _listToVector,
+	define: _define
     });
 
     var _scheme_builtins = {
@@ -597,8 +601,7 @@
     };
 
     _.each(_scheme_builtins, function(value, key) {
-	var sym = _stringToSymbol(key);
-	_top_level[key] = _bind(sym, value);
+	_define(key, value);
     });
 
     var _begin   = _stringToSymbol("begin");
